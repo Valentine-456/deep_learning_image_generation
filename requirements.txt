@@ -1,0 +1,13 @@
+numpy<2
+pyyaml
+matplotlib
+scikit-learn
+tqdm
+ipykernel
+ruff
+black
+pre-commit
+scipy
+pillow
+einops
+torch-fidelity

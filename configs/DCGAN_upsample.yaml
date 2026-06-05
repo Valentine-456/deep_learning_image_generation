@@ -3,7 +3,7 @@ model:
   in_channels: 3
   image_size: 128
   latent_dim: 128
-  generator_type: transpose
+  generator_type: upsample
   generator_features: 128
   discriminator_features: 64
 
@@ -17,10 +17,10 @@ data:
   test_fraction: 0.05
 
 training:
-  epochs: 100
-  batch_size: 64
+  epochs: 150
+  batch_size: 32
   generator_lr: 0.0001
-  discriminator_lr: 0.00005
+  discriminator_lr: 0.000025
   beta1: 0.5
   beta2: 0.999
   workers: 4

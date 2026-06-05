@@ -1,4 +1,4 @@
-from .DCGAN import DCGAN, DCGANDiscriminator, DCGANGenerator
+from .DCGAN import DCGAN, DCGANDiscriminator, DCGANGenerator, UpsampleConvGenerator
 from .VAE import VAEImageGenerator
 
 
@@ -21,6 +21,7 @@ def build_model(cfg: dict):
             image_size=model_cfg.get("image_size", cfg["data"]["image_size"]),
             generator_features=model_cfg.get("generator_features", 64),
             discriminator_features=model_cfg.get("discriminator_features", 64),
+            generator_type=model_cfg.get("generator_type", "transpose"),
         )
 
     raise ValueError(f"Unknown model type: {model_cfg['type']}")
@@ -30,6 +31,7 @@ __all__ = [
     "DCGAN",
     "DCGANDiscriminator",
     "DCGANGenerator",
+    "UpsampleConvGenerator",
     "VAEImageGenerator",
     "build_model",
 ]

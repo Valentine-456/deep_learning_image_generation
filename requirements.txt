@@ -11,3 +11,5 @@ scipy
 pillow
 einops
 torch-fidelity
+lpips
+pytorch-fid

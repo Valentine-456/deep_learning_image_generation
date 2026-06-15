@@ -2,6 +2,7 @@ data/
 preprocessed/
 preprocessed64/
 results/
+/evaluation/
 *.pt
 *.pth
 .venv/

@@ -1,0 +1,30 @@
+model:
+  type: DCGAN
+  in_channels: 3
+  image_size: 64
+  latent_dim: 128
+  generator_type: upsample
+  generator_features: 128
+  discriminator_features: 64
+
+data:
+  cache_dir: preprocessed/train
+  image_size: 64
+  augmentation: true
+  only_cats: true
+  train_fraction: 0.85
+  val_fraction: 0.1
+  test_fraction: 0.05
+
+training:
+  epochs: 130
+  batch_size: 128
+  generator_lr: 0.0001
+  discriminator_lr: 0.000025
+  beta1: 0.5
+  beta2: 0.999
+  workers: 4
+  seed: 42
+  sample_every: 5
+  num_sample_images: 16
+  out_dir: results

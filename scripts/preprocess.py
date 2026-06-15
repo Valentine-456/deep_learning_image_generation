@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 
 INPUT_DIR = Path("data")
-OUTPUT_DIR = Path("preprocessed") # preprocessed | preprocessed64
+OUTPUT_DIR = Path("preprocessed64") # preprocessed | preprocessed64
 IMAGE_SIZE = 64 # 64
 OVERWRITE = False
 

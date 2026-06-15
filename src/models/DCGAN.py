@@ -1,7 +1,18 @@
 from __future__ import annotations
 
+import math
+
 import torch
 from torch import nn
+
+
+def _validate_image_size(image_size: int) -> int:
+    if image_size < 32 or image_size & (image_size - 1) != 0:
+        raise ValueError(
+            "DCGAN image_size must be a power of two and at least 32. "
+            f"Got {image_size}."
+        )
+    return int(math.log2(image_size))
 
 
 class DCGANGenerator(nn.Module):
@@ -14,19 +25,38 @@ class DCGANGenerator(nn.Module):
     ) -> None:
         super().__init__()
 
-        if image_size != 128:
-            raise ValueError("This DCGAN generator is configured for 128x128 images.")
+        log2_size = _validate_image_size(image_size)
+        num_blocks = log2_size - 3
+        channel_multiplier = 2 ** num_blocks
 
         self.latent_dim = latent_dim
-        self.net = nn.Sequential(
-            self._block(latent_dim, features * 16, 4, 1, 0),
-            self._block(features * 16, features * 8, 4, 2, 1),
-            self._block(features * 8, features * 4, 4, 2, 1),
-            self._block(features * 4, features * 2, 4, 2, 1),
-            self._block(features * 2, features, 4, 2, 1),
-            nn.ConvTranspose2d(features, out_channels, kernel_size=4, stride=2, padding=1),
-            nn.Tanh(),
+
+        layers: list[nn.Module] = [
+            self._block(latent_dim, features * channel_multiplier, 4, 1, 0)
+        ]
+
+        current_channels = features * channel_multiplier
+        for _ in range(num_blocks):
+            next_channels = current_channels // 2
+            if next_channels < features:
+                next_channels = features
+            layers.append(self._block(current_channels, next_channels, 4, 2, 1))
+            current_channels = next_channels
+
+        layers.extend(
+            [
+                nn.ConvTranspose2d(
+                    current_channels,
+                    out_channels,
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                ),
+                nn.Tanh(),
+            ]
         )
+
+        self.net = nn.Sequential(*layers)
 
     @staticmethod
     def _block(
@@ -67,22 +97,39 @@ class UpsampleConvGenerator(nn.Module):
     ) -> None:
         super().__init__()
 
-        if image_size != 128:
-            raise ValueError("This upsample-convolution generator is configured for 128x128 images.")
+        log2_size = _validate_image_size(image_size)
+        num_blocks = log2_size - 2
+        channel_multiplier = 2 ** (num_blocks - 1)
 
         self.latent_dim = latent_dim
-        self.net = nn.Sequential(
-            nn.ConvTranspose2d(latent_dim, features * 16, kernel_size=4, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(features * 16),
+
+        layers: list[nn.Module] = [
+            nn.ConvTranspose2d(
+                latent_dim,
+                features * channel_multiplier,
+                kernel_size=4,
+                stride=1,
+                padding=0,
+                bias=False,
+            ),
+            nn.BatchNorm2d(features * channel_multiplier),
             nn.ReLU(inplace=True),
-            self._block(features * 16, features * 8),
-            self._block(features * 8, features * 4),
-            self._block(features * 4, features * 2),
-            self._block(features * 2, features),
-            self._block(features, features // 2),
-            nn.Conv2d(features // 2, out_channels, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
+        ]
+
+        current_channels = features * channel_multiplier
+        for _ in range(num_blocks):
+            next_channels = max(current_channels // 2, max(features // 2, 1))
+            layers.append(self._block(current_channels, next_channels))
+            current_channels = next_channels
+
+        layers.extend(
+            [
+                nn.Conv2d(current_channels, out_channels, kernel_size=3, stride=1, padding=1),
+                nn.Tanh(),
+            ]
         )
+
+        self.net = nn.Sequential(*layers)
 
     @staticmethod
     def _block(in_channels: int, out_channels: int) -> nn.Sequential:
@@ -117,18 +164,22 @@ class DCGANDiscriminator(nn.Module):
     ) -> None:
         super().__init__()
 
-        if image_size != 128:
-            raise ValueError("This DCGAN discriminator is configured for 128x128 images.")
+        log2_size = _validate_image_size(image_size)
+        num_blocks = log2_size - 3
 
-        self.net = nn.Sequential(
+        layers: list[nn.Module] = [
             nn.Conv2d(in_channels, features, kernel_size=4, stride=2, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
-            self._block(features, features * 2),
-            self._block(features * 2, features * 4),
-            self._block(features * 4, features * 8),
-            self._block(features * 8, features * 16),
-            nn.Conv2d(features * 16, 1, kernel_size=4, stride=1, padding=0),
-        )
+        ]
+
+        current_channels = features
+        for _ in range(num_blocks):
+            next_channels = current_channels * 2
+            layers.append(self._block(current_channels, next_channels))
+            current_channels = next_channels
+
+        layers.append(nn.Conv2d(current_channels, 1, kernel_size=4, stride=1, padding=0))
+        self.net = nn.Sequential(*layers)
 
     @staticmethod
     def _block(in_channels: int, out_channels: int) -> nn.Sequential:

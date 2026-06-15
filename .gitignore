@@ -1,5 +1,6 @@
 data/
 preprocessed/
+preprocessed64/
 results/
 *.pt
 *.pth

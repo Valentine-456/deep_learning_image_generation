@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.dataset import ImageGenerationDataset, split_image_paths
 from src.models import build_model
-from src.trainers import DCGANTrainer, VAETrainer
+from src.trainers import DCGANTrainer, DDPMTrainer, VAETrainer
 from src.utils import save_json, seed_everything
 
 
@@ -80,6 +80,20 @@ def main() -> None:
 
     if cfg["model"]["type"].lower() == "dcgan":
         train_dcgan(model, train_loader, training_cfg, device, out_dir, sample_dir, cfg)
+        return
+
+    if cfg["model"]["type"].lower() in {"ddpm", "ddpm_attention"}:
+        train_ddpm(
+            model,
+            train_loader,
+            val_loader,
+            test_loader,
+            training_cfg,
+            device,
+            out_dir,
+            sample_dir,
+            cfg,
+        )
         return
 
     optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg["lr"])
@@ -253,6 +267,90 @@ def train_dcgan(
             "config": cfg,
             "device": str(device),
             "history": history,
+        },
+    )
+    print(f"\nSaved => {out_dir}/")
+
+
+def train_ddpm(
+    model: nn.Module,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    test_loader: DataLoader,
+    training_cfg: dict,
+    device: torch.device,
+    out_dir: Path,
+    sample_dir: Path,
+    cfg: dict,
+) -> None:
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=training_cfg["lr"],
+        betas=(
+            training_cfg.get("beta1", 0.9),
+            training_cfg.get("beta2", 0.999),
+        ),
+    )
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=training_cfg["epochs"],
+        eta_min=training_cfg.get("min_lr", 0.00001),
+    )
+    best_checkpoint_path = out_dir / "best_model.pth"
+    best_val_loss = float("inf")
+    sample_every = training_cfg.get("sample_every", 10)
+    num_samples = training_cfg.get("num_sample_images", 16)
+    history = []
+
+    for epoch in range(1, training_cfg["epochs"] + 1):
+        t0 = time.time()
+        current_lr = optimizer.param_groups[0]["lr"]
+        train_metrics = DDPMTrainer.run_epoch(
+            model, train_loader, optimizer, device, train=True
+        )
+        val_metrics = DDPMTrainer.run_epoch(
+            model, val_loader, optimizer=None, device=device, train=False
+        )
+
+        print(
+            f"epoch {epoch:3d}/{training_cfg['epochs']}  "
+            f"train loss={train_metrics['loss']:.4f}  "
+            f"val loss={val_metrics['loss']:.4f}  "
+            f"lr={current_lr:.6f}  "
+            f"{time.time() - t0:.1f}s"
+        )
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": train_metrics["loss"],
+                "valid_loss": val_metrics["loss"],
+                "lr": current_lr,
+            }
+        )
+
+        if val_metrics["loss"] < best_val_loss:
+            best_val_loss = val_metrics["loss"]
+            torch.save(model.state_dict(), best_checkpoint_path)
+        lr_scheduler.step()
+
+        if epoch % sample_every == 0:
+            DDPMTrainer.save_samples(model, num_samples, sample_dir, epoch, device)
+
+    torch.save(model.state_dict(), out_dir / "final_model.pth")
+    model.load_state_dict(torch.load(best_checkpoint_path, map_location=device))
+    test_metrics = DDPMTrainer.run_epoch(
+        model, test_loader, optimizer=None, device=device, train=False
+    )
+    print(f"test loss={test_metrics['loss']:.4f}")
+
+    save_json(
+        out_dir / "results.json",
+        {
+            "config": cfg,
+            "device": str(device),
+            "best_val_loss": best_val_loss,
+            "history": history,
+            "test_metrics": test_metrics,
         },
     )
     print(f"\nSaved => {out_dir}/")
